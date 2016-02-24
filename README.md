@@ -5,3 +5,7 @@
 CSG-core format can be distinguished from OpenSCAD format by using version tag:
 
     #csg-core 0.3
+
+## License
+
+CC0 1.0 Universal

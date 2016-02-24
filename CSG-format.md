@@ -26,6 +26,7 @@ Objects consist of object name and optional arguments:
 `cube(size = [15, 15, 15]);`
 
 There are following structural characters:
+* begin-comment "#" number sign
 * begin-arguments "(" left bracket
 * begin-array "[" left square bracket
 * begin-scope "{" left curly bracket
@@ -49,6 +50,12 @@ The literal names **must** be lowercase. No other literal names are allowed.
 ### Strings
 
 The representation of strings is similar to conventions used in the C family of programming languages. A string begins and ends with quotation marks. All Unicode characters may be placed within the quotation marks.
+
+### Comments
+
+Comments consist of number sign followed by an arbitrary string. Only single line comments are allowed.
+
+    comment = begin-comment *( string )
 
 ### Names
 
