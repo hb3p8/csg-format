@@ -7,45 +7,87 @@
 using namespace std;
 using namespace lars;
 
-int main(int argc, char ** argv){
-  parsing_expression_grammar_builder<double> g;
-  using expression = expression<double>;
+class math_visitor{
   
+  double value;
   unordered_map<string,double> variables;
   
-  g["Expression"] << "(Set | Sum) &'\\0'"              << [ ](expression e){ e.value() = e[0].get_value();                       };
-  g["Set"       ] << "Name '=' Sum"                    << [&](expression e){ variables[e[0].string()] = e[1].get_value();        };
-  g["Sum"       ] << "Add | Subtract | Product"        << [ ](expression e){ e.value() = e[0].get_value();                       };
-  g["Add"       ] << "Sum '+' Product"                 << [ ](expression e){ e.value() = e[0].get_value() + e[1].get_value();    };
-  g["Subtract"  ] << "Sum '-' Product"                 << [ ](expression e){ e.value() = e[0].get_value() - e[1].get_value();    };
-  g["Product"   ] << "Multiply | Divide | Exponent"    << [ ](expression e){ e.value() = e[0].get_value();                       };
-  g["Multiply"  ] << "Product '*' Exponent"            << [ ](expression e){ e.value() = e[0].get_value() * e[1].get_value();    };
-  g["Divide"    ] << "Product '/' Exponent"            << [ ](expression e){ e.value() = e[0].get_value() / e[1].get_value();    };
-  g["Exponent"  ] << "Power | Atomic"                  << [ ](expression e){ e.value() = e[0].get_value();                       };
-  g["Power"     ] << "Atomic '^' Exponent"             << [ ](expression e){ e.value() = pow(e[0].get_value(),e[1].get_value()); };
-  g["Atomic"    ] << "Number | Brackets | Variable"    << [ ](expression e){ e.value() = e[0].get_value();                       };
-  g["Brackets"  ] << "'(' Sum ')'"                     << [ ](expression e){ e.value() = e[0].get_value();                       };
-  g["Number"    ] << "'-'? [0-9]+ ('.' [0-9]+)?"       << [ ](expression e){ e.value() = stod(e.string());                       };
-  g["Variable"  ] << "Name"                            << [&](expression e){ e.value() = variables[e[0].string()];               };
-  g["Name"      ] << "[a-zA-Z] [a-zA-Z0-9]*"           ;
+public:
+  
+  double get_value(){
+    return value;
+  }
+  
+  double get_value(expression<math_visitor> e){
+    e.accept(this);
+    return get_value();
+  }
+  
+  void visit_number(expression<math_visitor> e){
+    value = stod(e.string());
+  }
+  
+  void visit_set_variable(expression<math_visitor> e){
+    variables[e[0].string()] = get_value(e[1]);
+  }
+  
+  void visit_variable(expression<math_visitor> e){
+    value = variables[e[0].string()];
+  }
+  
+  void visit_left_binary_operator_list (expression<math_visitor> e){
+    double lhs = get_value(e[0]);
+    
+    for(auto i:range((e.size()-1)/2)*2+1){
+      double rhs = get_value(e[i+1]);
+           if(e[i].character()=='+'){ lhs = lhs + rhs; }
+      else if(e[i].character()=='-'){ lhs = lhs - rhs; }
+      else if(e[i].character()=='*'){ lhs = lhs * rhs; }
+      else if(e[i].character()=='/'){ lhs = lhs / rhs; }
+      else throw "undefined operator";
+    }
+    
+    value = lhs;
+  }
+  
+  void visit_exponent(expression<math_visitor> e){
+    if(e.size() == 1) e[0].accept();
+    else value = pow(get_value(e[0]), get_value(e[1]));
+  }
+  
+};
+
+int main(int argc, char ** argv){
+  parsing_expression_grammar_builder<math_visitor> g;
+  using expression = expression<math_visitor>;
+  
+  // g["Expression"] << "(Set | Sum) &'\\0'"                      ;
+  g["Object"  ] << "Name '(' Argument (',' Argument)* ')' ';'"   << [ ](expression e){std::cout << e[0].string() << std::endl; };
+  g["Argument"    ] << "Number | '\"' String '\"'"            ;
+  g["Number"    ] << "'-'? [0-9]+ ('.' [0-9]+)?"               ;
+  g["Name"      ] << "[a-zA-Z] [a-zA-Z]*"                      ;
+  g["String"    ] << "[.]*"                                    ;
   
   g.set_starting_rule("Expression");
   
   g["Whitespace"] << "[ \t]";
+  
   g.set_separator_rule("Whitespace");
   
   auto p = g.get_parser();
   
+  math_visitor visitor;
+
   while (true) {
     string str;
     cout << "> ";
     getline(cin,str);
     if(str == "q" || str == "quit")break;
-    try {
-      auto e = p.parse(str);
-      cout << str << " = " << *e.evaluate() << endl;
+    try { 
+      p.parse(str).accept(&visitor); 
+      cout << str << " = " << visitor.get_value() << endl;
     }
-    catch (parser<double>::error e){
+    catch (parser<math_visitor>::error e){
       cout << "  ";
       for(auto i UNUSED :range(e.begin_position().character-1))cout << " ";
       for(auto i UNUSED :range(e.length()))cout << "~";
@@ -56,4 +98,3 @@ int main(int argc, char ** argv){
   
   return 0;
 }
-
