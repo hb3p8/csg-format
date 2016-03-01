@@ -6,4 +6,8 @@ include_directories("${PROJECT_SOURCE_DIR}/include")
 
 add_definitions(-std=c++11)
 
+add_subdirectory("${PROJECT_SOURCE_DIR}/src/json11")
+
 add_executable (csg-convert src/main.cpp)
+
+target_link_libraries (csg-convert json11)
