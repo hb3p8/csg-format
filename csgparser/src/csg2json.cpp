@@ -22,6 +22,8 @@ int main (int argc, char ** argv) {
   Json aData = csg::Parser::parse (argv[1]);
 
   csg::Parser::writeJSON (aData, argv[2]);
+
+  csg::Parser::write (aData, "");
  
   return 0;
 }

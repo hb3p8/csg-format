@@ -23,3 +23,5 @@ target_link_libraries (csgparser json11)
 # csg2json exe
 add_executable (csg2json src/csg2json.cpp)
 target_link_libraries (csg2json csgparser)
+
+add_executable (lineTest src/lineTest.cpp)

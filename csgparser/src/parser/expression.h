@@ -196,7 +196,7 @@ namespace lars {
       std::stringstream & stream = *new std::stringstream;
       std::string str = string();
       if(error_code == syntax_error && end_position().location < full_string().size()) str += full_string()[end_position().location];
-      stream << message << " at line " << end_position().line << ", character " << end_position().character << ", while parsing " << rule_name() << ": \"" << str << "\"";
+      stream << message << " at line " << (int)end_position().line << ", character " << (int)end_position().character << ", while parsing " << rule_name() << ": \"" << str << "\"";
       error_string_buffer->reset(new std::string(stream.str()));
       return error_string_buffer->get()->c_str();
     }
