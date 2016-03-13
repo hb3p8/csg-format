@@ -23,7 +23,7 @@ int main (int argc, char ** argv) {
 
   csg::Parser::writeJSON (aData, argv[2]);
 
-  csg::Parser::write (aData, "");
+  // csg::Parser::write (aData, "");
  
   return 0;
 }

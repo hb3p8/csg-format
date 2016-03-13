@@ -9,33 +9,54 @@
 #include <csgparser.hpp>
 
 using namespace lars;
-using namespace json11;
 
 namespace csg {
 
+//! Helper class for CSG format parsing.
 class CsgVisitor{  
   
 public:
 
-  Json getValue () {
+  CsgVisitor()
+    : m_versionName ("undefined"),
+      m_majorVersion (0),
+      m_minorVersion (0) {}
 
-    return m_value;
+  json11::Json getResult() {
+
+    json11::Json::array aContents = json11::Json::array();
+
+    for (auto anObject: m_value.array_items()) {
+      if (!anObject.is_null()) {
+        aContents.push_back (anObject);
+      }
+    }
+
+    json11::Json::object aResult = json11::Json::object({
+      { "type", "CSG file" },
+      { "version-name", m_versionName },
+      { "version-major", m_majorVersion },
+      { "version-minor", m_minorVersion },
+      { "contents", aContents },
+    });
+
+    return aResult;
   }
 
-  Json getValue (expression<CsgVisitor> e) {
+  json11::Json getValue (expression<CsgVisitor> e) {
 
     e.accept (this);
     return m_value;
   }
 
-  std::pair<std::string, Json> getArgument (expression<CsgVisitor> e) {
+  std::pair<std::string, json11::Json> getProperty (expression<CsgVisitor> e) {
 
     return std::make_pair (e[0].string(), getValue (e[1]));
   }
 
   void visitNumber (expression<CsgVisitor> e) {
 
-    m_value = stod (e.string());
+    m_value = std::stod (e.string());
   }
 
   void visitBoolean (expression<CsgVisitor> e) {
@@ -48,21 +69,32 @@ public:
     m_value = e.string();
   }
 
-  void visitArguments (expression<CsgVisitor> e) {
+  void visitVersion (expression<CsgVisitor> e) {
 
-    Json::object anArgs;
-
-    for (int i = 0; i < e.size(); ++i) {
-      auto anArg = getArgument (e[i]);
-      anArgs[anArg.first] = anArg.second;
+    if (e.size() != 3) {
+      std::cout << "Warning: incorrect version string: " << e.string() << std::endl;
     }
 
-    m_value = anArgs;
+    m_versionName = e[0].string();
+    m_majorVersion = std::stoi (e[1].string());
+    m_minorVersion = std::stoi (e[2].string());
+  }
+
+  void visitProperties (expression<CsgVisitor> e) {
+
+    json11::Json::object aProps;
+
+    for (int i = 0; i < e.size(); ++i) {
+      auto aProperty = getProperty (e[i]);
+      aProps[aProperty.first] = aProperty.second;
+    }
+
+    m_value = aProps;
   }
 
   void visitArray (expression<CsgVisitor> e) {
 
-    Json::array anArray;
+    json11::Json::array anArray;
 
     for (int i = 0; i < e.size(); ++i) {
       anArray.push_back (getValue (e[i]));
@@ -73,7 +105,7 @@ public:
  
   void visitObject (expression<CsgVisitor> e) {
 
-    Json::object anObject = Json::object({
+    json11::Json::object anObject = json11::Json::object({
       { "type", e[0].string() },
       { "properties", getValue (e[1]) },
     });
@@ -83,7 +115,7 @@ public:
 
   void visitInstruction (expression<CsgVisitor> e) {
 
-    Json::object anInstruction = Json::object({
+    json11::Json::object anInstruction = json11::Json::object({
       { "type", e[0].string() },
       { "properties", getValue (e[1]) },
       { "objects", getValue (e[2]) },
@@ -92,13 +124,22 @@ public:
     m_value = anInstruction;
   }
 
+  void printVersion() {
+    std::cout << m_versionName << " " << m_majorVersion << "." << m_minorVersion << std::endl;
+  }
+
 private:
 
-  Json m_value;
+  json11::Json m_value;
+
+  std::string m_versionName;
+  int m_majorVersion;
+  int m_minorVersion;
   
 };
 
-lars::parser<CsgVisitor> createParser() {
+//! Creates the parser built on CSG format grammar.
+static lars::parser<CsgVisitor> createParser() {
 
   parsing_expression_grammar_builder<CsgVisitor> aGrammar;
   using expression = expression<CsgVisitor>;
@@ -107,19 +148,23 @@ lars::parser<CsgVisitor> createParser() {
 
   aGrammar["File"]         << "ObjectList &'\\0'"                                 << aPropagateFn;
   aGrammar["ObjectList"]   << "( Comment | Object | Instruction )+"               << [](expression e){ e.visitor().visitArray (e); };
-  aGrammar["Comment"]      << "'#' (!('\n') .)*"                                  << [](expression e){ /*std::cout << "Comment: " << e[0].string() << std::endl;*/ };
-  aGrammar["Instruction"]  << "Name '(' ( Matrix | ArgumentList ) ')' InstrBody"  << [](expression e){ e.visitor().visitInstruction (e); };
+  aGrammar["Comment"]      << "'#' ( VesrionStr | CommentStr )"                   << aPropagateFn;
+  aGrammar["CommentStr"]   << "(!('\n') .)*"                                      << [](expression e){ };
+  aGrammar["VesrionStr"]   << "VersionName VersionInt '.' VersionInt"             << [](expression e){ e.visitor().visitVersion (e); };
+  aGrammar["VersionInt"]   << "[0-9]"                                             ;
+  aGrammar["VersionName"]  << "(!(['\n' ]) .)+"                                   ;
+  aGrammar["Instruction"]  << "Name '(' ( Matrix | PropertyList ) ')' InstrBody"  << [](expression e){ e.visitor().visitInstruction (e); };
   aGrammar["InstrBody"]    << "'{' ObjectList '}'"                                << aPropagateFn;
-  aGrammar["Object"  ]     << "Name '(' ArgumentList ')' ';'"                     << [](expression e){ e.visitor().visitObject (e); };
-  aGrammar["ArgumentList"] << " Argument ( ',' Argument )* | Argument? "          << [](expression e){ e.visitor().visitArguments (e); };
-  aGrammar["Argument"]     << "( Name '=' ( Value ) )"                            ;
+  aGrammar["Object"  ]     << "Name '(' PropertyList ')' ';'"                     << [](expression e){ e.visitor().visitObject (e); };
+  aGrammar["PropertyList"] << " Property ( ',' Property )* | Property? "          << [](expression e){ e.visitor().visitProperties (e); };
+  aGrammar["Property"]     << "( Name '=' ( Value ) )"                            ;
   aGrammar["Matrix"]       << "Array"                                             << aPropagateFn;
   aGrammar["Array"]        << "'[' ( Value ( ',' Value )* | (Value)? ) ']'"       << [](expression e){ e.visitor().visitArray (e); };
   aGrammar["Value"   ]     << "Number | '\"' String '\"' | Boolean | Array"       << aPropagateFn;
   aGrammar["Number"  ]     << "'-'? [0-9]+ ('.' [0-9]+)?"                         << [](expression e){ e.visitor().visitNumber (e); };
   aGrammar["Boolean" ]     << "'true' | 'false'"                                  << [](expression e){ e.visitor().visitBoolean (e); };
-  aGrammar["Name"    ]     << "'$'? [a-zA-Z] [a-zA-Z]*"                                ;
-  aGrammar["String"  ]     << "(!('\"') .)*"                                     << [](expression e){ e.visitor().visitString (e); };
+  aGrammar["Name"    ]     << "'$'? [a-zA-Z] [a-zA-Z]*"                           ;
+  aGrammar["String"  ]     << "(!('\"') .)*"                                      << [](expression e){ e.visitor().visitString (e); };
 
   aGrammar.set_starting_rule ("File");
 
@@ -129,73 +174,6 @@ lars::parser<CsgVisitor> createParser() {
 
   return aGrammar.get_parser();
 }
-/*
-// Valid types for CSG file format.
-enum ValidType {
-  CsgGroup,
-  CsgMatrix,
-
-  // CSG operations
-  CsgUnion,
-  CsgDifference,
-  CsgIntersection,
-
-  // CSG primitives
-  CsgCube,
-  CsgSphere,
-  CsgCylinder,
-};
-
-enum Profile {
-  CsgCoreProfile,
-  OpenScadProfile
-};
-
-//! Helper class what ensures that JSON CSG description is valid.
-class CsgValidator {
-
-public:
-
-  CsgValidator() {
-
-    m_validNames["group"] = CsgGroup;
-    m_validNames["multmatrix"] = CsgMatrix;
-    m_validNames["union"] = CsgUnion;
-    m_validNames["difference"] = CsgDifference;
-    m_validNames["intersection"] = CsgIntersection;
-    m_validNames["cube"] = CsgCube;
-    m_validNames["sphere"] = CsgSphere;
-    m_validNames["cylinder"] = CsgCylinder;
-  }
-
-  void validate (const json11::Json& theObject) {
-
-    if (!theObject.is_object()) {
-      return;
-    }
-
-    std::string aType = theObject["type"];
-
-    auto anIter = m_validNames.find (aType);
-    if (anIter == m_validNames.end()) {
-      return; // invalid object
-    }
-
-    switch (*anIter) {
-      case CsgGroup:
-      {
-
-        break;
-      }
-    }
-  }
-
-private:
-
-  std::map<std::string, ValidType> m_validNames;
-
-  Profile m_profile;
-};*/
 
 json11::Json Parser::parse (const std::string theFilePath) {
 
@@ -206,22 +184,22 @@ json11::Json Parser::parse (const std::string theFilePath) {
   std::stringstream aBuffer;
   aBuffer << aStream.rdbuf();
 
-  std::cout << aBuffer.str() << std::endl;
-
   try { 
     aParser.parse (aBuffer.str()).accept (&aVisitor); 
   }
   catch (parser<CsgVisitor>::error e) {
-    for(auto i UNUSED :range(e.begin_position().character-1))std::cout << " ";
-    for(auto i UNUSED :range(e.length()))std::cout << "~";
+    for(auto i UNUSED :range (e.begin_position().character - 1)) {
+      std::cout << " ";
+    }
+    for(auto i UNUSED :range (e.length())) {
+      std::cout << "~";
+    }
     std::cout << "^\n";
     std::cout << e.error_message() << " while parsing " << e.rule_name() << std::endl;
     std::cout << e.what() << std::endl;
   }
 
-  std::cout << aVisitor.getValue().dump() << std::endl;
-
-  return aVisitor.getValue();
+  return aVisitor.getResult();
 }
 
 json11::Json Parser::parseJSON (const std::string theFilePath) {
@@ -231,17 +209,13 @@ json11::Json Parser::parseJSON (const std::string theFilePath) {
   aBuffer << aStream.rdbuf();
 
   std::string anErrors;
-  Json aCsg = Json::parse (aBuffer.str(), anErrors);
+  json11::Json aCsg = json11::Json::parse (aBuffer.str(), anErrors);
   std::cout << anErrors << std::endl;
 
-  // TODO: validate
+  validate (aCsg);
 }
 
-// TODO: parser class members
-// TODO: replace cout
-void writeData (const json11::Json theData, const std::string& theIndent);
-
-void writeProperties (const json11::Json theData) {
+void Parser::writeProperties (std::ostream& theStream, const json11::Json theData) {
   if (!theData["properties"].is_object()) {
     throw std::runtime_error ("Object properties should be represented with a dictionary");
   }
@@ -254,61 +228,75 @@ void writeProperties (const json11::Json theData) {
 
   // comma separated lists are messy
   auto anIter = aProperties.begin();
-  std::cout << anIter->first << " = " << anIter->second.dump();
+  theStream << anIter->first << " = " << anIter->second.dump();
   anIter++;
   for (; anIter != aProperties.end(); ++anIter) {
 
-    std::cout << ", " << anIter->first << " = " << anIter->second.dump();
+    theStream << ", " << anIter->first << " = " << anIter->second.dump();
   }
 }
 
-void writeObject (const json11::Json theData, const std::string& theIndent) {
+void Parser::writeObject (std::ostream& theStream, const json11::Json theData, const std::string& theIndent) {
 
-  std::cout << theIndent << theData["type"].string_value() << "(";
-  writeProperties (theData);
-  std::cout << ");\n";
+  theStream << theIndent << theData["type"].string_value() << "(";
+  writeProperties (theStream, theData);
+  theStream << ");\n";
 }
 
-void writeInstruction (const json11::Json theData, const std::string& theIndent) {
+void Parser::writeInstruction (std::ostream& theStream, const json11::Json theData, const std::string& theIndent) {
 
-  std::cout << theIndent << theData["type"].string_value() << "(";
-  writeProperties (theData);
-  std::cout << ") {\n";
+  theStream << theIndent << theData["type"].string_value() << "(";
+  writeProperties (theStream, theData);
+  theStream << ") {\n";
   for (auto& anObject: theData["objects"].array_items()) {
-    writeData (anObject, theIndent + "  ");
+    writeData (theStream, anObject, theIndent + "  ");
   }
-  std::cout << theIndent << "}\n";
+  theStream << theIndent << "}\n";
 }
 
-//! Checks if object has at least specified children count
-void assertChildrenNum (const json11::Json theData, int theChildrenNum) {
+void Parser::assertChildrenNum (const json11::Json theData, int theChildrenNum) {
   
   if (theData["objects"].array_items().size() < 2) {
     throw std::runtime_error ("Too few children objects for instruction: " + theData["type"].dump());
   }
 }
 
-void writeData (const json11::Json theData, const std::string& theIndent) {
+void Parser::writeData (std::ostream& theStream, const json11::Json theData, const std::string& theIndent) {
 
   if (theData.is_array()) {
     for (auto& anObject: theData.array_items()) {
-      writeData (anObject, theIndent);
+      writeData (theStream, anObject, theIndent);
     }
+
+    return;
+  }
+
+  if (theData.is_null()) {
+    throw std::runtime_error ("Unexpected NULL object");
   }
 
   if (!theData.is_object()) {
-    return; // error
+    throw std::runtime_error ("Dictionary expected: " + theData.dump());
   }
 
   std::string aType = theData["type"].string_value();
 
-  if (aType == "group") {
+  if (aType == "CSG file") {
+
+    theStream << theIndent << "# " << theData["version-name"].string_value() <<
+                              " " << theData["version-major"].dump() <<
+                              "." << theData["version-minor"].dump() << std::endl;
+
+    writeData (theStream, theData["contents"], theIndent);
+  }
+  else if (aType == "group") {
+
     // OpenScad compatibility empty group
     if (theData["objects"].array_items().empty()) {
-      std::cout << theIndent << "group();\n";
+      theStream << theIndent << "group();" << std::endl;
     }
     else {
-      writeInstruction (theData, theIndent);
+      writeInstruction (theStream, theData, theIndent);
     }
   }
   else if (aType == "multmatrix") {
@@ -317,38 +305,38 @@ void writeData (const json11::Json theData, const std::string& theIndent) {
     if (theData["properties"].is_array()) {
 
       // TODO: validate matrix
-      std::cout << theIndent << theData["type"].string_value() << "(";
-      std::cout << theData["properties"].dump();
-      std::cout << ") {\n";
+      theStream << theIndent << theData["type"].string_value() << "(";
+      theStream << theData["properties"].dump();
+      theStream << ") {\n";
       for (auto& anObject: theData["objects"].array_items()) {
-        writeData (anObject, theIndent + "  ");
+        writeData (theStream, anObject, theIndent + "  ");
       }
-      std::cout << theIndent << "}\n";
+      theStream << theIndent << "}\n";
     }
     else {
-      writeInstruction (theData, theIndent);
+      writeInstruction (theStream, theData, theIndent);
     }
   }
   else if (aType == "union") {
     assertChildrenNum (theData, 2);
-    writeInstruction (theData, theIndent);
+    writeInstruction (theStream, theData, theIndent);
   }
   else if (aType == "difference") {
     assertChildrenNum (theData, 2);
-    writeInstruction (theData, theIndent);
+    writeInstruction (theStream, theData, theIndent);
   }
   else if (aType == "intersection") {
     assertChildrenNum (theData, 2);
-    writeInstruction (theData, theIndent);
+    writeInstruction (theStream, theData, theIndent);
   }
   else if (aType == "cube") {
-    writeObject (theData, theIndent);
+    writeObject (theStream, theData, theIndent);
   }
   else if (aType == "sphere") {
-    writeObject (theData, theIndent);
+    writeObject (theStream, theData, theIndent);
   }
   else if (aType == "cylinder") {
-    writeObject (theData, theIndent);
+    writeObject (theStream, theData, theIndent);
   }
   else {
     throw std::runtime_error ("Unknown object type: " + theData["type"].dump());
@@ -357,12 +345,36 @@ void writeData (const json11::Json theData, const std::string& theIndent) {
 
 void Parser::write (const json11::Json theData, const std::string theFilePath) {
 
-  writeData (theData, "");
+  std::ofstream aFile (theFilePath);
+  writeData (aFile, theData, "");
+  aFile.close();
+}
+
+void Parser::validate (const json11::Json theData) {
+
+  std::stringstream aBuffer;
+  // try { 
+    writeData (aBuffer, theData, "");
+  // }
+  // catch (std::exception e) {
+  //   std::cout << "Serialization error: " << e.what() << std::endl;
+  //   return;
+  // }
+
+  auto aParser = createParser();
+  CsgVisitor aVisitor;
+
+  try { 
+    aParser.parse (aBuffer.str()).accept (&aVisitor); 
+  }
+  catch (parser<CsgVisitor>::error e) {
+    std::cout << "Validation error: " << e.what() << std::endl;
+  }
 }
 
 void Parser::writeJSON (const json11::Json theData, const std::string theFilePath) {
 
-  // TODO: validate
+  validate (theData);
   
   std::string aCsgJs = theData.dump();
 
