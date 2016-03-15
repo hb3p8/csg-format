@@ -96,7 +96,7 @@ An exponent part begins with the letter E in upper or lowercase, which may be fo
 
 Numeric values that cannot be represented as sequences of digits (such as Infinity and NaN) are not permitted.
 
-## CSG Elements
+# CSG Elements
 
 This section describes standard CSG primitives and operations.
 
@@ -111,11 +111,11 @@ Vector in 3d space should be represented as array consisting of 3 elements:
 
 `[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 15.0, 20.0, 5.0, 1]`
 
-### Objects
+## Objects
 
 In CSG file format objects represent CSG primitives.
 
-#### Cube
+### Cube
 
 Creates a cube in the first octant. When center is true, the cube is centered on the origin.
 
@@ -128,11 +128,140 @@ Creates a cube in the first octant. When center is true, the cube is centered on
     boolean: center
         false, cube is placed in 1st (positive) octant, one corner at (0,0,0)
         true, cube is centered at (0,0,0)
-        default: false
+        default: true
 
 **Example:**
 
     cube(size=[0.5, 2.0, 3.0], center=true);
+
+### Sphere
+
+Creates a sphere at the origin of the coordinate system.
+
+**Parameters:**
+
+    real: r
+        radius of sphere
+        default: 1.0
+
+**Example:**
+
+    sphere(r=0.5);
+
+### Cylinder
+
+Creates a cylinder centered about the z axis. When center is true, it is also centered vertically along the z axis.
+
+**Parameters:**
+
+    real: h
+        height of the cylinder
+        default: 1.0
+
+    real: r
+        radius of cylinder
+        default: 1.0
+
+    boolean: center
+        false, cylinder is placed above XY plane
+        true, cylinder is centered at (0,0,0)
+        default: true
+
+**Example:**
+
+    cylinder(h=3.0, r=0.5, center=true);
+
+### Cone
+
+Creates a cone centered about the z axis. When center is true, it is also centered vertically along the z axis.
+
+**Parameters:**
+
+    real: h
+        height of the cone
+        default: 1.0
+
+    real: r1
+        bottom radius of cone
+        default: 1.0
+
+    real: r2
+        top radius of cone
+        default: 1.0
+
+    boolean: center
+        false, cone is placed above XY plane
+        true, cone is centered at (0,0,0)
+        default: true
+
+**Example:**
+
+    cone(h=3.0, r1=1.5, r2=0.0, center=true);
+
+## Instructions
+
+In CSG file format instructions represent operations on CSG primitives.
+
+### Multmatrix
+
+Multiplies the geometry of all child elements with the given 4x4 transformation matrix.
+
+**Parameters:**
+
+    matrix: m
+        homogeneous transformation matrix
+        default: 1.0
+
+**Example:**
+
+    multmatrix(m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 15.0, 20.0, 5.0, 1]) {
+      cube(); 
+    }
+
+### Union
+
+Creates a union of all its child nodes. This is the sum of all children (logical **or**).
+
+**Example:**
+
+    union() {
+      cube(); 
+      sphere();
+    }
+
+### Difference
+
+Subtracts the 2nd (and all further) child nodes from the first one (logical **and not**).
+
+**Example:**
+
+    difference() {
+      cube(); 
+      sphere();
+    }
+
+### Intersection
+
+Creates the intersection of all child nodes. This keeps the overlapping portion (logical **and**).
+Only the area which is common or shared by **all** children is retained.
+
+**Example:**
+
+    intersection() {
+      cube(); 
+      sphere();
+    }
+
+### SMin
+
+Creates a union with smooth transitions of all its child nodes. For distance field based approaches could be implemented as polynomial smooth min or similar. Otherwise could fallback to a union operation.
+
+**Example:**
+
+    smin() {
+      cube(); 
+      sphere();
+    }
 
 ## Versioning
 
