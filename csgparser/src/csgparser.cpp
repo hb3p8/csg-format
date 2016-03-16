@@ -210,9 +210,14 @@ json11::Json Parser::parseJSON (const std::string theFilePath) {
 
   std::string anErrors;
   json11::Json aCsg = json11::Json::parse (aBuffer.str(), anErrors);
-  std::cout << anErrors << std::endl;
+
+  if (!anErrors.empty()) {
+    std::cout << anErrors << std::endl;
+  }
 
   validate (aCsg);
+
+  return aCsg;
 }
 
 void Parser::writeProperties (std::ostream& theStream, const json11::Json theData) {
@@ -296,6 +301,7 @@ void Parser::writeData (std::ostream& theStream, const json11::Json theData, con
       theStream << theIndent << "group();" << std::endl;
     }
     else {
+      assertChildrenNum (theData, 1);
       writeInstruction (theStream, theData, theIndent);
     }
   }
@@ -329,6 +335,10 @@ void Parser::writeData (std::ostream& theStream, const json11::Json theData, con
     assertChildrenNum (theData, 2);
     writeInstruction (theStream, theData, theIndent);
   }
+  else if (aType == "smin") {
+    assertChildrenNum (theData, 2);
+    writeInstruction (theStream, theData, theIndent);
+  }
   else if (aType == "cube") {
     writeObject (theStream, theData, theIndent);
   }
@@ -336,6 +346,9 @@ void Parser::writeData (std::ostream& theStream, const json11::Json theData, con
     writeObject (theStream, theData, theIndent);
   }
   else if (aType == "cylinder") {
+    writeObject (theStream, theData, theIndent);
+  }
+  else if (aType == "cone") {
     writeObject (theStream, theData, theIndent);
   }
   else {
@@ -353,13 +366,13 @@ void Parser::write (const json11::Json theData, const std::string theFilePath) {
 void Parser::validate (const json11::Json theData) {
 
   std::stringstream aBuffer;
-  // try { 
+  try { 
     writeData (aBuffer, theData, "");
-  // }
-  // catch (std::exception e) {
-  //   std::cout << "Serialization error: " << e.what() << std::endl;
-  //   return;
-  // }
+  }
+  catch (std::exception e) {
+    std::cout << "Serialization error: " << e.what() << std::endl;
+    return;
+  }
 
   auto aParser = createParser();
   CsgVisitor aVisitor;
