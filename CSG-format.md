@@ -256,11 +256,36 @@ Only the area which is common or shared by **all** children is retained.
 
 Creates a union with smooth transitions of all its child nodes. For distance field based approaches could be implemented as polynomial smooth min or similar. Otherwise could fallback to a union operation.
 
+**Parameters:**
+
+    real: k
+        smoothnes coefficient in range [0, 1] (smin should behave as simple union with k=0.0)
+        default: 0.5
+
 **Example:**
 
     smin() {
       cube(); 
       sphere();
+    }
+
+### Group
+
+Groups are used for CSG element aggregation. No implicit CSG operations should be performed on group children.
+
+**Parameters:**
+
+    string: name
+        associated name
+        default: ""
+
+**Example:**
+
+    group(name="widget") {
+      union() {
+        cube(); 
+        sphere();
+      }
     }
 
 ## Versioning
